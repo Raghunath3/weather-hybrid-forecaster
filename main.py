@@ -274,9 +274,7 @@ def get_local_now():
 
 def fetch_recent_weather():
 
-    url = (
-        "https://api.open-meteo.com/v1/forecast"
-    )
+    url = "https://api.open-meteo.com/v1/forecast"
 
     params = {
 
