@@ -1180,25 +1180,25 @@ async def forecast():
 
     except requests.RequestException as error:
 
-        raise HTTPException(
+    print("========== WEATHER API ERROR ==========")
+    print(repr(error))
+    print("=======================================")
 
-            status_code=503,
+    raise HTTPException(
+        status_code=503,
+        detail=f"Weather data service unavailable: {str(error)}"
+    )
 
-            detail=(
-                "Weather data service unavailable: "
-                + str(error)
-            )
-        )
+except Exception as error:
 
+    print("========== FORECAST ERROR ==========")
+    print(repr(error))
+    print("====================================")
 
-    except Exception as error:
-
-        raise HTTPException(
-
-            status_code=500,
-
-            detail=str(error)
-        )
+    raise HTTPException(
+        status_code=500,
+        detail=f"Forecast processing error: {str(error)}"
+    )
 
 
 # ============================================================
