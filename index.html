@@ -1,0 +1,2756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Weather Intelligence DSS | Chennai</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 10% 0%, rgba(59,130,246,.10), transparent 30%),
+                radial-gradient(circle at 90% 10%, rgba(99,102,241,.08), transparent 30%),
+                #070b14;
+            color: #e5e7eb;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            box-shadow:
+                0 20px 50px rgba(0,0,0,.20),
+                inset 0 1px 0 rgba(255,255,255,.025);
+            backdrop-filter: blur(18px);
+        }
+
+        .glass-soft {
+            background: rgba(15, 23, 42, 0.50);
+            border: 1px solid rgba(148, 163, 184, 0.11);
+        }
+
+        .metric-number {
+            letter-spacing: -0.045em;
+        }
+
+        .section-label {
+            letter-spacing: .16em;
+        }
+
+        .shap-positive {
+            background: linear-gradient(90deg, rgba(34,197,94,.18), rgba(34,197,94,.03));
+            border-left: 3px solid #22c55e;
+        }
+
+        .shap-negative {
+            background: linear-gradient(90deg, rgba(239,68,68,.18), rgba(239,68,68,.03));
+            border-left: 3px solid #ef4444;
+        }
+
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .35;
+            }
+        }
+
+        .loading {
+            animation: loadingPulse 1.4s infinite;
+        }
+
+        @keyframes loadingPulse {
+            0%,100% {
+                opacity: .45;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+
+<div class="max-w-7xl mx-auto px-5 py-6 md:px-8">
+
+    <!-- ========================================================= -->
+    <!-- HEADER -->
+    <!-- ========================================================= -->
+
+    <header class="glass rounded-3xl px-6 py-6 md:px-8 mb-6">
+
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+
+            <div>
+
+                <div class="flex items-center gap-3 mb-3">
+
+                    <div class="w-3 h-3 rounded-full bg-emerald-400 pulse-dot"></div>
+
+                    <span class="text-xs font-semibold uppercase section-label text-emerald-300">
+                        AI Weather Intelligence
+                    </span>
+
+                </div>
+
+                <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-white">
+                    Weather Decision Support System
+                </h1>
+
+                <p class="text-slate-400 mt-2 max-w-2xl">
+                    Explainable machine learning for short-term local weather
+                    forecasting and rainfall-event prediction.
+                </p>
+
+            </div>
+
+
+            <div class="flex flex-col sm:flex-row gap-3">
+
+                <div class="glass-soft rounded-xl px-4 py-3">
+
+                    <div class="text-xs text-slate-500 uppercase tracking-wider">
+                        Location
+                    </div>
+
+                    <div class="font-semibold text-white mt-1">
+                        Chennai, India
+                    </div>
+
+                </div>
+
+
+                <div class="glass-soft rounded-xl px-4 py-3">
+
+                    <div class="text-xs text-slate-500 uppercase tracking-wider">
+                        System Status
+                    </div>
+
+                    <div id="system-status"
+                         class="font-semibold text-emerald-400 mt-1">
+                        Connecting...
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="mt-6 pt-5 border-t border-slate-800 flex flex-col md:flex-row md:justify-between gap-2 text-xs text-slate-500">
+
+            <span>
+                Data source:
+                <strong class="text-slate-400">Open-Meteo</strong>
+            </span>
+
+            <span id="forecast-origin">
+                Forecast origin: --
+            </span>
+
+            <span>
+                Horizon:
+                <strong class="text-slate-400">24 hours</strong>
+            </span>
+
+        </div>
+
+    </header>
+
+
+    <!-- ========================================================= -->
+    <!-- ERROR / LOADING -->
+    <!-- ========================================================= -->
+
+    <div id="loading-state"
+         class="glass rounded-2xl p-5 mb-6 loading">
+
+        <div class="flex items-center gap-3">
+
+            <div class="w-3 h-3 rounded-full bg-blue-400"></div>
+
+            <div>
+                <div class="font-semibold text-white">
+                    Running weather intelligence pipeline...
+                </div>
+
+                <div class="text-sm text-slate-500 mt-1">
+                    Fetching current conditions and generating model predictions.
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div id="error-state"
+         class="hidden glass rounded-2xl p-5 mb-6 border border-red-500/20">
+
+        <div class="flex items-start gap-4">
+
+            <div class="text-red-400 text-xl">
+                !
+            </div>
+
+            <div class="flex-1">
+
+                <div class="font-semibold text-red-300">
+                    Unable to retrieve forecast
+                </div>
+
+                <div id="error-message"
+                     class="text-sm text-slate-400 mt-1">
+                    Please check that the FastAPI server is running.
+                </div>
+
+            </div>
+
+            <button onclick="fetchForecast()"
+                    class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm">
+                Retry
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- ========================================================= -->
+    <!-- CURRENT CONDITIONS -->
+    <!-- ========================================================= -->
+
+    <section class="mb-6">
+
+        <div class="flex items-end justify-between mb-4">
+
+            <div>
+
+                <div class="text-xs uppercase section-label text-slate-500">
+                    Observation Layer
+                </div>
+
+                <h2 class="text-xl font-semibold text-white mt-1">
+                    Current Conditions
+                </h2>
+
+            </div>
+
+            <div id="last-updated"
+                 class="text-xs text-slate-500">
+                Updated: --
+            </div>
+
+        </div>
+
+
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+
+            <!-- Temperature -->
+
+            <div class="glass rounded-2xl p-5">
+
+                <div class="text-sm text-slate-500">
+                    Temperature
+                </div>
+
+                <div id="cur-temp"
+                     class="metric-number text-3xl font-bold text-white mt-3">
+                    --°C
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Current air temperature
+                </div>
+
+            </div>
+
+
+            <!-- Humidity -->
+
+            <div class="glass rounded-2xl p-5">
+
+                <div class="text-sm text-slate-500">
+                    Humidity
+                </div>
+
+                <div id="cur-hum"
+                     class="metric-number text-3xl font-bold text-white mt-3">
+                    --%
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Relative humidity
+                </div>
+
+            </div>
+
+
+            <!-- Pressure -->
+
+            <div class="glass rounded-2xl p-5">
+
+                <div class="text-sm text-slate-500">
+                    Pressure
+                </div>
+
+                <div id="cur-pres"
+                     class="metric-number text-3xl font-bold text-white mt-3">
+                    -- hPa
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Surface pressure
+                </div>
+
+            </div>
+
+
+            <!-- Wind -->
+
+            <div class="glass rounded-2xl p-5">
+
+                <div class="text-sm text-slate-500">
+                    Wind
+                </div>
+
+                <div id="cur-wind"
+                     class="metric-number text-3xl font-bold text-white mt-3">
+                    -- km/h
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    10 m wind speed
+                </div>
+
+            </div>
+
+
+            <!-- Cloud -->
+
+            <div class="glass rounded-2xl p-5">
+
+                <div class="text-sm text-slate-500">
+                    Cloud Cover
+                </div>
+
+                <div id="cur-cloud"
+                     class="metric-number text-3xl font-bold text-white mt-3">
+                    --%
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Total cloud cover
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- MAIN FORECAST -->
+    <!-- ========================================================= -->
+
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+
+        <!-- TEMPERATURE FORECAST -->
+
+        <div class="lg:col-span-2 glass rounded-3xl p-6">
+
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+
+                <div>
+
+                    <div class="text-xs uppercase section-label text-blue-400">
+                        ML Forecast
+                    </div>
+
+                    <h2 class="text-xl font-semibold text-white mt-1">
+                        24-Hour-Ahead Temperature
+                    </h2>
+
+                    <p class="text-sm text-slate-500 mt-1">
+                        Exact target: temperature at t+24h
+                    </p>
+
+                </div>
+
+
+                <div class="glass-soft rounded-xl px-4 py-3 text-right">
+
+                    <div class="text-xs text-slate-500">
+                        Predicted Temperature
+                    </div>
+
+                    <div id="forecast-temp"
+                         class="text-2xl font-bold text-white mt-1">
+                        --°C
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- Forecast visualization -->
+
+            <div class="mt-7 h-64">
+
+                <canvas id="forecastChart"></canvas>
+
+            </div>
+
+
+            <!-- Interval -->
+
+            <div class="grid grid-cols-3 gap-3 mt-6">
+
+                <div class="glass-soft rounded-xl p-4">
+
+                    <div class="text-xs text-slate-500">
+                        Lower Bound
+                    </div>
+
+                    <div id="lower-bound"
+                         class="text-lg font-semibold text-white mt-1">
+                        --°C
+                    </div>
+
+                </div>
+
+
+                <div class="glass-soft rounded-xl p-4">
+
+                    <div class="text-xs text-slate-500">
+                        Prediction
+                    </div>
+
+                    <div id="central-prediction"
+                         class="text-lg font-semibold text-blue-300 mt-1">
+                        --°C
+                    </div>
+
+                </div>
+
+
+                <div class="glass-soft rounded-xl p-4">
+
+                    <div class="text-xs text-slate-500">
+                        Upper Bound
+                    </div>
+
+                    <div id="upper-bound"
+                         class="text-lg font-semibold text-white mt-1">
+                        --°C
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="mt-4 text-xs text-slate-500">
+
+                Interval:
+                <span class="text-slate-400">
+                    empirical residual-based prediction interval
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- RAINFALL -->
+
+        <div class="glass rounded-3xl p-6">
+
+            <div class="text-xs uppercase section-label text-cyan-400">
+                Event Classification
+            </div>
+
+            <h2 class="text-xl font-semibold text-white mt-1">
+                Rainfall Occurrence
+            </h2>
+
+            <p class="text-sm text-slate-500 mt-1">
+                Rainfall > 0.1 mm at t+24h
+            </p>
+
+
+            <div class="flex items-center justify-center py-8">
+
+                <div class="relative w-48 h-48">
+
+                    <svg class="w-full h-full -rotate-90"
+                         viewBox="0 0 120 120">
+
+                        <circle
+                            cx="60"
+                            cy="60"
+                            r="48"
+                            fill="none"
+                            stroke="rgba(148,163,184,.10)"
+                            stroke-width="10"/>
+
+                        <circle
+                            id="rain-progress"
+                            cx="60"
+                            cy="60"
+                            r="48"
+                            fill="none"
+                            stroke="rgb(56,189,248)"
+                            stroke-width="10"
+                            stroke-linecap="round"
+                            stroke-dasharray="301.59"
+                            stroke-dashoffset="301.59"/>
+
+                    </svg>
+
+
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+
+                        <div id="rain-prob"
+                             class="text-4xl font-bold text-white">
+                            --%
+                        </div>
+
+                        <div class="text-xs text-slate-500">
+                            model probability
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div id="rain-class"
+                 class="text-center rounded-xl px-4 py-3 font-semibold bg-slate-800 text-slate-300">
+                ANALYZING
+            </div>
+
+
+            <div class="mt-5 space-y-3 text-sm">
+
+                <div class="flex justify-between">
+
+                    <span class="text-slate-500">
+                        Decision threshold
+                    </span>
+
+                    <span id="rain-threshold"
+                          class="text-slate-300">
+                        20%
+                    </span>
+
+                </div>
+
+
+                <div class="flex justify-between">
+
+                    <span class="text-slate-500">
+                        Classification
+                    </span>
+
+                    <span id="rain-definition"
+                          class="text-slate-300 text-right">
+                        --
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- DECISION SUPPORT -->
+    <!-- ========================================================= -->
+
+    <section class="glass rounded-3xl p-6 mb-6">
+
+        <div class="flex items-center justify-between">
+
+            <div>
+
+                <div class="text-xs uppercase section-label text-amber-400">
+                    Decision Support
+                </div>
+
+                <h2 class="text-xl font-semibold text-white mt-1">
+                    Operational Assessment
+                </h2>
+
+            </div>
+
+            <div id="alert-count"
+                 class="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400">
+                0 alerts
+            </div>
+
+        </div>
+
+
+        <div id="decision-container"
+             class="mt-5">
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="flex items-start gap-4">
+
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                        ✓
+                    </div>
+
+                    <div>
+
+                        <div class="font-semibold text-white">
+                            No active weather alerts
+                        </div>
+
+                        <div class="text-sm text-slate-500 mt-1">
+                            Current model outputs do not trigger the configured
+                            decision-support rules.
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- EXPLAINABLE AI -->
+    <!-- ========================================================= -->
+
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+
+        <!-- LOCAL SHAP -->
+
+        <div class="glass rounded-3xl p-6">
+
+            <div>
+
+                <div class="text-xs uppercase section-label text-purple-400">
+                    Explainable AI
+                </div>
+
+                <h2 class="text-xl font-semibold text-white mt-1">
+                    Why This Forecast?
+                </h2>
+
+                <p class="text-sm text-slate-500 mt-1">
+                    Local TreeSHAP contribution for the current prediction.
+                </p>
+
+            </div>
+
+
+            <div class="mt-5 flex items-center justify-between text-xs text-slate-500">
+
+                <span>
+                    Feature
+                </span>
+
+                <span>
+                    Contribution
+                </span>
+
+            </div>
+
+
+            <div id="local-shap-container"
+                 class="space-y-2 mt-3">
+
+                <div class="text-sm text-slate-500">
+                    Loading explanation...
+                </div>
+
+            </div>
+
+
+            <div class="mt-5 pt-4 border-t border-slate-800 text-xs text-slate-500">
+
+                <span class="text-emerald-400">Positive</span>
+                contributions push the prediction upward.
+
+                <span class="ml-2 text-red-400">Negative</span>
+                contributions push it downward.
+
+            </div>
+
+        </div>
+
+
+        <!-- GLOBAL SHAP -->
+
+        <div class="glass rounded-3xl p-6">
+
+            <div>
+
+                <div class="text-xs uppercase section-label text-purple-400">
+                    Global Explainability
+                </div>
+
+                <h2 class="text-xl font-semibold text-white mt-1">
+                    Most Influential Features
+                </h2>
+
+                <p class="text-sm text-slate-500 mt-1">
+                    Mean absolute SHAP contribution from the 2023 test analysis.
+                </p>
+
+            </div>
+
+
+            <div id="global-shap-container"
+                 class="space-y-4 mt-6">
+
+                <div class="text-sm text-slate-500">
+                    Loading global feature importance...
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- MODEL / RESEARCH TRANSPARENCY -->
+    <!-- ========================================================= -->
+
+    <section class="glass rounded-3xl p-6 mb-6">
+
+        <div class="mb-6">
+
+            <div class="text-xs uppercase section-label text-indigo-400">
+                Research Configuration
+            </div>
+
+            <h2 class="text-xl font-semibold text-white mt-1">
+                Model & Methodology
+            </h2>
+
+        </div>
+
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    Operational Model
+                </div>
+
+                <div class="text-lg font-semibold text-white mt-2">
+                    XGBoost
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Gradient-boosted decision trees
+                </div>
+
+            </div>
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    Temperature Target
+                </div>
+
+                <div class="text-lg font-semibold text-white mt-2">
+                    t + 24 hours
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Continuous temperature regression
+                </div>
+
+            </div>
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    Rainfall Target
+                </div>
+
+                <div class="text-lg font-semibold text-white mt-2">
+                    > 0.1 mm
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Binary occurrence classification
+                </div>
+
+            </div>
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    Explainability
+                </div>
+
+                <div class="text-lg font-semibold text-white mt-2">
+                    TreeSHAP
+                </div>
+
+                <div class="text-xs text-slate-500 mt-2">
+                    Local + global interpretation
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="mt-6 pt-5 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+
+            <div>
+
+                <span class="text-slate-500">
+                    Study location
+                </span>
+
+                <div class="text-slate-300 mt-1">
+                    Chennai, India
+                </div>
+
+            </div>
+
+
+            <div>
+
+                <span class="text-slate-500">
+                    Forecast horizon
+                </span>
+
+                <div class="text-slate-300 mt-1">
+                    24 hours ahead
+                </div>
+
+            </div>
+
+
+            <div>
+
+                <span class="text-slate-500">
+                    Deployment source
+                </span>
+
+                <div class="text-slate-300 mt-1">
+                    Open-Meteo operational weather data
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+<!-- ========================================================= -->
+<!-- RESEARCH EVIDENCE -->
+<!-- ========================================================= -->
+
+<section class="mb-6">
+
+    <div class="glass rounded-3xl p-6">
+
+        <!-- Section heading -->
+
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-7">
+
+            <div>
+
+                <div class="text-xs uppercase section-label text-blue-400">
+                    Research Evidence
+                </div>
+
+                <h2 class="text-2xl font-semibold text-white mt-1">
+                    2023 Holdout Evaluation
+                </h2>
+
+                <p class="text-sm text-slate-500 mt-2 max-w-3xl">
+                    Final evaluation on the untouched 2023 test set.
+                    Models were trained using historical observations through 2022.
+                </p>
+
+            </div>
+
+            <div class="glass-soft rounded-xl px-4 py-3">
+
+                <div class="text-xs text-slate-500">
+                    Evaluation protocol
+                </div>
+
+                <div class="text-sm font-semibold text-slate-300 mt-1">
+                    Train: 2019–2022
+                    <span class="text-slate-600 mx-1">•</span>
+                    Test: 2023
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- KEY FINDING -->
+        <!-- ================================================= -->
+
+        <div class="rounded-2xl p-5 mb-6
+                    bg-blue-500/5
+                    border border-blue-500/15">
+
+            <div class="flex items-start gap-4">
+
+                <div class="w-11 h-11 rounded-xl
+                            bg-blue-500/10
+                            flex items-center justify-center
+                            text-blue-400
+                            text-lg">
+
+                    ★
+
+                </div>
+
+                <div>
+
+                    <div class="text-xs uppercase tracking-wider text-blue-400">
+                        Primary Finding
+                    </div>
+
+                    <div class="text-lg font-semibold text-white mt-1">
+                        XGBoost achieved the strongest overall temperature
+                        forecasting performance.
+                    </div>
+
+                    <div class="text-sm text-slate-500 mt-2">
+                        It achieved the lowest MAE and RMSE and the highest
+                        R² among the evaluated models on the 2023 holdout set.
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- PERFORMANCE TABLE -->
+        <!-- ================================================= -->
+
+        <div class="overflow-x-auto">
+
+            <table class="w-full text-sm">
+
+                <thead>
+
+                    <tr class="border-b border-slate-800">
+
+                        <th class="text-left py-4 px-3 text-slate-500 font-medium">
+                            Model
+                        </th>
+
+                        <th class="text-right py-4 px-3 text-slate-500 font-medium">
+                            MAE ↓
+                        </th>
+
+                        <th class="text-right py-4 px-3 text-slate-500 font-medium">
+                            RMSE ↓
+                        </th>
+
+                        <th class="text-right py-4 px-3 text-slate-500 font-medium">
+                            MAPE ↓
+                        </th>
+
+                        <th class="text-right py-4 px-3 text-slate-500 font-medium">
+                            R² ↑
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    <!-- Persistence -->
+
+                    <tr class="border-b border-slate-800/60">
+
+                        <td class="py-4 px-3 text-slate-300">
+                            Persistence
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            0.902
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            1.275
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            3.241%
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            0.849
+                        </td>
+
+                    </tr>
+
+
+                    <!-- XGBoost -->
+
+                    <tr class="border-b border-slate-800/60
+                               bg-emerald-500/5">
+
+                        <td class="py-4 px-3">
+
+                            <div class="flex items-center gap-3">
+
+                                <span class="font-semibold text-white">
+                                    XGBoost
+                                </span>
+
+                                <span class="text-[10px] uppercase
+                                             tracking-wider
+                                             px-2 py-1
+                                             rounded-full
+                                             bg-emerald-500/10
+                                             text-emerald-400">
+
+                                    Best
+
+                                </span>
+
+                            </div>
+
+                        </td>
+
+                        <td class="py-4 px-3 text-right font-semibold text-emerald-400">
+                            0.842
+                        </td>
+
+                        <td class="py-4 px-3 text-right font-semibold text-emerald-400">
+                            1.143
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-300">
+                            3.025%
+                        </td>
+
+                        <td class="py-4 px-3 text-right font-semibold text-emerald-400">
+                            0.879
+                        </td>
+
+                    </tr>
+
+
+                    <!-- LSTM -->
+
+                    <tr class="border-b border-slate-800/60">
+
+                        <td class="py-4 px-3 text-slate-300">
+                            LSTM
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            1.685
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            2.154
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            6.248%
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            0.569
+                        </td>
+
+                    </tr>
+
+
+                    <!-- Hybrid -->
+
+                    <tr>
+
+                        <td class="py-4 px-3 text-slate-300">
+                            XGBoost–LSTM Hybrid
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            0.862
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            1.160
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            3.108%
+                        </td>
+
+                        <td class="py-4 px-3 text-right text-slate-400">
+                            0.875
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- PERFORMANCE INTERPRETATION -->
+        <!-- ================================================= -->
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-7">
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    XGBoost vs Persistence
+                </div>
+
+                <div class="text-2xl font-bold text-emerald-400 mt-2">
+                    6.67%
+                </div>
+
+                <div class="text-xs text-slate-500 mt-1">
+                    MAE improvement
+                </div>
+
+            </div>
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    XGBoost vs Hybrid
+                </div>
+
+                <div class="text-2xl font-bold text-emerald-400 mt-2">
+                    2.39%
+                </div>
+
+                <div class="text-xs text-slate-500 mt-1">
+                    lower MAE for XGBoost
+                </div>
+
+            </div>
+
+
+            <div class="glass-soft rounded-2xl p-5">
+
+                <div class="text-xs text-slate-500">
+                    Best R²
+                </div>
+
+                <div class="text-2xl font-bold text-blue-400 mt-2">
+                    0.879
+                </div>
+
+                <div class="text-xs text-slate-500 mt-1">
+                    XGBoost
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- ABLATION -->
+        <!-- ================================================= -->
+
+        <div class="mt-10 pt-8 border-t border-slate-800">
+
+            <div class="text-xs uppercase section-label text-purple-400">
+                Feature Ablation
+            </div>
+
+            <h3 class="text-xl font-semibold text-white mt-1">
+                Contribution of Feature Groups
+            </h3>
+
+            <p class="text-sm text-slate-500 mt-2">
+                Development-set ablation results from the 2022 validation period.
+            </p>
+
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+
+
+                <!-- Full -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Full Feature Set
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-slate-300">0.7401°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0378°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8784</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- No temporal -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Without Temporal Features
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-amber-300">0.7505°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0447°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8767</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- No lag -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Without Lag Features
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-slate-300">0.7442°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0488°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8758</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- No rolling -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Without Rolling Features
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-emerald-300">0.7357°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0333°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8794</span>
+                        </div>
+
+                    </div>
+
+                    <div class="text-xs text-slate-600 mt-3">
+                        Slightly better validation result; full model retained
+                        for the final protocol.
+                    </div>
+
+                </div>
+
+
+                <!-- No wind -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Without Wind Direction
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-slate-300">0.7393°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0382°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8783</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- No change -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm font-semibold text-white">
+                        Without Change Features
+                    </div>
+
+                    <div class="mt-4 space-y-2 text-sm">
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">MAE</span>
+                            <span class="text-slate-300">0.7407°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">RMSE</span>
+                            <span class="text-slate-300">1.0418°C</span>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">R²</span>
+                            <span class="text-slate-300">0.8774</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="mt-5 rounded-xl px-4 py-3
+                        bg-purple-500/5
+                        border border-purple-500/10">
+
+                <span class="text-purple-300 font-medium">
+                    Observation:
+                </span>
+
+                <span class="text-sm text-slate-500 ml-1">
+                    Temporal features produced the clearest degradation when removed,
+                    supporting their inclusion in the forecasting feature set.
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- STATISTICAL VALIDATION -->
+        <!-- ================================================= -->
+
+        <div class="mt-10 pt-8 border-t border-slate-800">
+
+            <div class="text-xs uppercase section-label text-amber-400">
+                Statistical Validation
+            </div>
+
+            <h3 class="text-xl font-semibold text-white mt-1">
+                Paired Error Analysis
+            </h3>
+
+            <p class="text-sm text-slate-500 mt-2">
+                Pairwise comparison of absolute forecasting errors on the
+                2023 test set using the Wilcoxon signed-rank test.
+            </p>
+
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm text-slate-500">
+                        Persistence → XGBoost
+                    </div>
+
+                    <div class="text-xl font-semibold text-emerald-400 mt-2">
+                        6.67% improvement
+                    </div>
+
+                    <div class="text-xs text-slate-500 mt-2">
+                        Cohen's dz = 0.100
+                    </div>
+
+                    <div class="text-xs text-emerald-400 mt-1">
+                        p &lt; 0.001
+                    </div>
+
+                </div>
+
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm text-slate-500">
+                        XGBoost → Hybrid
+                    </div>
+
+                    <div class="text-xl font-semibold text-amber-300 mt-2">
+                        2.39% higher MAE
+                    </div>
+
+                    <div class="text-xs text-slate-500 mt-2">
+                        Cohen's dz = −0.118
+                    </div>
+
+                    <div class="text-xs text-amber-300 mt-1">
+                        p &lt; 0.001
+                    </div>
+
+                </div>
+
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="text-sm text-slate-500">
+                        LSTM → Hybrid
+                    </div>
+
+                    <div class="text-xl font-semibold text-emerald-400 mt-2">
+                        48.86% improvement
+                    </div>
+
+                    <div class="text-xs text-slate-500 mt-2">
+                        Cohen's dz = 0.667
+                    </div>
+
+                    <div class="text-xs text-emerald-400 mt-1">
+                        p &lt; 0.001
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="mt-5 text-xs text-slate-600">
+
+                Bonferroni-adjusted significance level:
+                α = 0.00833.
+                All evaluated pairwise comparisons were statistically significant
+                under the adopted protocol.
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- UNCERTAINTY -->
+        <!-- ================================================= -->
+
+        <div class="mt-10 pt-8 border-t border-slate-800">
+
+            <div class="text-xs uppercase section-label text-cyan-400">
+                Forecast Uncertainty
+            </div>
+
+            <h3 class="text-xl font-semibold text-white mt-1">
+                Empirical Prediction Interval Coverage
+            </h3>
+
+            <p class="text-sm text-slate-500 mt-2">
+                Intervals are calibrated from the 2022 validation residuals
+                and evaluated on the 2023 test set.
+            </p>
+
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+
+
+                <!-- 80 -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="flex justify-between">
+
+                        <span class="text-slate-500">
+                            80% nominal
+                        </span>
+
+                        <span class="text-cyan-400 font-semibold">
+                            74.16%
+                        </span>
+
+                    </div>
+
+                    <div class="h-2 bg-slate-800 rounded-full mt-4 overflow-hidden">
+
+                        <div class="h-full rounded-full bg-cyan-400"
+                             style="width:74.16%">
+                        </div>
+
+                    </div>
+
+                    <div class="text-xs text-slate-600 mt-3">
+                        Interval width: 2.32°C
+                    </div>
+
+                </div>
+
+
+                <!-- 90 -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="flex justify-between">
+
+                        <span class="text-slate-500">
+                            90% nominal
+                        </span>
+
+                        <span class="text-cyan-400 font-semibold">
+                            86.32%
+                        </span>
+
+                    </div>
+
+                    <div class="h-2 bg-slate-800 rounded-full mt-4 overflow-hidden">
+
+                        <div class="h-full rounded-full bg-cyan-400"
+                             style="width:86.32%">
+                        </div>
+
+                    </div>
+
+                    <div class="text-xs text-slate-600 mt-3">
+                        Interval width: 3.22°C
+                    </div>
+
+                </div>
+
+
+                <!-- 95 -->
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="flex justify-between">
+
+                        <span class="text-slate-500">
+                            95% nominal
+                        </span>
+
+                        <span class="text-cyan-400 font-semibold">
+                            92.97%
+                        </span>
+
+                    </div>
+
+                    <div class="h-2 bg-slate-800 rounded-full mt-4 overflow-hidden">
+
+                        <div class="h-full rounded-full bg-cyan-400"
+                             style="width:92.97%">
+                        </div>
+
+                    </div>
+
+                    <div class="text-xs text-slate-600 mt-3">
+                        Interval width: 4.16°C
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="mt-5 rounded-xl px-4 py-3
+                        bg-cyan-500/5
+                        border border-cyan-500/10">
+
+                <span class="text-cyan-300 font-medium">
+                    Interpretation:
+                </span>
+
+                <span class="text-sm text-slate-500 ml-1">
+                    The reported intervals are empirical residual-based
+                    prediction intervals rather than guaranteed confidence intervals.
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- FINAL RESEARCH STATEMENT -->
+        <!-- ================================================= -->
+
+        <div class="mt-10 pt-8 border-t border-slate-800">
+
+            <div class="rounded-2xl p-6
+                        bg-slate-950/50
+                        border border-slate-800">
+
+                <div class="text-xs uppercase section-label text-slate-500">
+                    Research Conclusion
+                </div>
+
+                <p class="text-slate-300 leading-relaxed mt-3">
+
+                    The final evaluation indicates that XGBoost provides the
+                    strongest overall performance for 24-hour-ahead temperature
+                    forecasting on the Chennai 2023 holdout set. The evaluated
+                    XGBoost–LSTM hybrid remains competitive but does not surpass
+                    XGBoost under the adopted protocol. LSTM alone exhibits
+                    substantially higher forecasting error.
+
+                </p>
+
+                <p class="text-slate-500 text-sm leading-relaxed mt-3">
+
+                    The operational DSS therefore uses XGBoost for temperature
+                    forecasting while retaining rainfall-event classification,
+                    local and global TreeSHAP explanations, and empirical
+                    uncertainty estimates as complementary decision-support
+                    components.
+
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+    <!-- ========================================================= -->
+    <!-- FOOTER -->
+    <!-- ========================================================= -->
+
+    <footer class="py-6 text-center">
+
+        <div class="text-xs text-slate-600">
+
+            Weather Intelligence Decision Support System
+
+        </div>
+
+        <div class="text-xs text-slate-700 mt-1">
+
+            Explainable machine learning • Short-term forecasting • Chennai
+
+        </div>
+
+    </footer>
+
+</div>
+
+
+<script>
+
+    let forecastChart = null;
+
+
+    /* ============================================================
+       HELPERS
+    ============================================================ */
+
+    function safeNumber(value, digits = 2) {
+
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+            return "--";
+        }
+
+        return Number(value).toFixed(digits);
+    }
+
+
+    function formatDateTime(timestamp) {
+
+        if (!timestamp) {
+            return "--";
+        }
+
+        const date = new Date(timestamp);
+
+        if (Number.isNaN(date.getTime())) {
+            return timestamp;
+        }
+
+        return date.toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true
+        });
+
+    }
+
+
+    function featureLabel(feature) {
+
+        const labels = {
+
+            "temperature":
+                "Current temperature",
+
+            "temperature_lag_1h":
+                "Temperature 1h ago",
+
+            "temperature_lag_3h":
+                "Temperature 3h ago",
+
+            "temperature_lag_6h":
+                "Temperature 6h ago",
+
+            "temperature_lag_12h":
+                "Temperature 12h ago",
+
+            "temperature_lag_24h":
+                "Temperature 24h ago",
+
+            "humidity":
+                "Humidity",
+
+            "pressure":
+                "Surface pressure",
+
+            "cloud_cover":
+                "Cloud cover",
+
+            "wind_speed":
+                "Wind speed",
+
+            "wind_direction":
+                "Wind direction",
+
+            "hour":
+                "Hour of day",
+
+            "month":
+                "Month",
+
+            "hour_sin":
+                "Hourly seasonality (sin)",
+
+            "hour_cos":
+                "Hourly seasonality (cos)",
+
+            "month_sin":
+                "Annual seasonality (sin)",
+
+            "month_cos":
+                "Annual seasonality (cos)",
+
+            "temperature_rolling_mean_24h":
+                "24h temperature mean",
+
+            "temperature_rolling_std_24h":
+                "24h temperature variability",
+
+            "temperature_change_1h":
+                "1h temperature change",
+
+            "pressure_change_1h":
+                "1h pressure change",
+
+            "wind_direction_sin":
+                "Wind direction (sin)",
+
+            "wind_direction_cos":
+                "Wind direction (cos)",
+
+            "rain":
+                "Current rainfall",
+
+            "rain_lag_1h":
+                "Rainfall 1h ago"
+
+        };
+
+        return labels[feature] || feature.replaceAll("_", " ");
+
+    }
+
+
+    /* ============================================================
+       STATUS
+    ============================================================ */
+
+    function setStatus(text, success = true) {
+
+        const status = document.getElementById("system-status");
+
+        status.innerText = text;
+
+        status.className = success
+            ? "font-semibold text-emerald-400 mt-1"
+            : "font-semibold text-red-400 mt-1";
+
+    }
+
+
+    /* ============================================================
+       LOCAL SHAP
+    ============================================================ */
+
+    function renderLocalSHAP(localData) {
+
+        const container =
+            document.getElementById("local-shap-container");
+
+        container.innerHTML = "";
+
+        if (!localData || !localData.top_contributors) {
+
+            container.innerHTML =
+                `<div class="text-sm text-slate-500">
+                    No local explanation available.
+                 </div>`;
+
+            return;
+        }
+
+
+        const features = localData.top_contributors;
+
+
+        features.forEach((item) => {
+
+            const value = Number(item.shap_value);
+
+            const positive = value >= 0;
+
+            const wrapper = document.createElement("div");
+
+            wrapper.className =
+                `rounded-xl p-3 ${
+                    positive
+                        ? "shap-positive"
+                        : "shap-negative"
+                }`;
+
+
+            const row = document.createElement("div");
+
+            row.className =
+                "flex items-center justify-between gap-4";
+
+
+            const left = document.createElement("div");
+
+            left.className = "min-w-0";
+
+
+            const name = document.createElement("div");
+
+            name.className =
+                "text-sm font-medium text-slate-200 truncate";
+
+            name.innerText =
+                featureLabel(item.feature);
+
+
+            const rawName = document.createElement("div");
+
+            rawName.className =
+                "text-xs text-slate-600 mt-0.5";
+
+            rawName.innerText =
+                item.feature;
+
+
+            left.appendChild(name);
+            left.appendChild(rawName);
+
+
+            const right = document.createElement("div");
+
+            right.className =
+                "text-right whitespace-nowrap";
+
+
+            const contribution = document.createElement("div");
+
+            contribution.className =
+                `font-semibold ${
+                    positive
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                }`;
+
+            contribution.innerText =
+                `${positive ? "+" : ""}${safeNumber(value, 3)}°C`;
+
+
+            const direction = document.createElement("div");
+
+            direction.className =
+                "text-xs text-slate-500 mt-0.5";
+
+            direction.innerText =
+                positive
+                    ? "pushes forecast upward"
+                    : "pushes forecast downward";
+
+
+            right.appendChild(contribution);
+            right.appendChild(direction);
+
+
+            row.appendChild(left);
+            row.appendChild(right);
+
+            wrapper.appendChild(row);
+
+            container.appendChild(wrapper);
+
+        });
+
+
+        const base = document.createElement("div");
+
+        base.className =
+            "text-xs text-slate-500 mt-4";
+
+        base.innerHTML =
+            `SHAP base value:
+             <span class="text-slate-300">
+                ${safeNumber(localData.base_value)}°C
+             </span>`;
+
+        container.appendChild(base);
+
+    }
+
+
+    /* ============================================================
+       GLOBAL SHAP
+    ============================================================ */
+
+    function renderGlobalSHAP(globalData) {
+
+        const container =
+            document.getElementById("global-shap-container");
+
+        container.innerHTML = "";
+
+
+        if (!globalData || globalData.length === 0) {
+
+            container.innerHTML =
+                `<div class="text-sm text-slate-500">
+                    No global feature importance available.
+                 </div>`;
+
+            return;
+
+        }
+
+
+        const maxValue =
+            Math.max(
+                ...globalData.map(
+                    x => Number(x.mean_absolute_shap)
+                )
+            );
+
+
+        globalData.slice(0, 10).forEach((item, index) => {
+
+            const value =
+                Number(item.mean_absolute_shap);
+
+            const percentage =
+                maxValue > 0
+                    ? (value / maxValue) * 100
+                    : 0;
+
+
+            const wrapper =
+                document.createElement("div");
+
+
+            const header =
+                document.createElement("div");
+
+            header.className =
+                "flex items-center justify-between mb-2";
+
+
+            const feature =
+                document.createElement("span");
+
+            feature.className =
+                "text-sm text-slate-300";
+
+            feature.innerText =
+                `${index + 1}. ${featureLabel(item.feature)}`;
+
+
+            const valueText =
+                document.createElement("span");
+
+            valueText.className =
+                "text-xs text-slate-500";
+
+            valueText.innerText =
+                safeNumber(value, 3);
+
+
+            header.appendChild(feature);
+            header.appendChild(valueText);
+
+
+            const track =
+                document.createElement("div");
+
+            track.className =
+                "h-2 rounded-full bg-slate-800 overflow-hidden";
+
+
+            const bar =
+                document.createElement("div");
+
+            bar.className =
+                "h-full rounded-full bg-indigo-400";
+
+            bar.style.width =
+                `${percentage}%`;
+
+
+            track.appendChild(bar);
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(track);
+
+            container.appendChild(wrapper);
+
+        });
+
+    }
+
+
+    /* ============================================================
+       RAIN GAUGE
+    ============================================================ */
+
+    function updateRainGauge(probability) {
+
+        const circle =
+            document.getElementById("rain-progress");
+
+        const circumference = 301.59;
+
+        const clamped =
+            Math.max(
+                0,
+                Math.min(100, Number(probability))
+            );
+
+
+        const offset =
+            circumference -
+            (clamped / 100) * circumference;
+
+
+        circle.style.strokeDashoffset =
+            offset;
+
+    }
+
+
+    /* ============================================================
+       RAIN CLASSIFICATION
+    ============================================================ */
+
+    function renderRainfall(data) {
+
+        const prediction =
+            data.rainfall_prediction;
+
+        const probability =
+            Number(prediction.probability);
+
+
+        document.getElementById("rain-prob").innerText =
+            `${safeNumber(probability, 2)}%`;
+
+
+        document.getElementById("rain-threshold").innerText =
+            `${Number(prediction.threshold) * 100}%`;
+
+
+        document.getElementById("rain-definition").innerText =
+            prediction.target_definition;
+
+
+        const badge =
+            document.getElementById("rain-class");
+
+
+        badge.innerText =
+            prediction.classification;
+
+
+        if (prediction.classification === "RAIN EXPECTED") {
+
+            badge.className =
+                "text-center rounded-xl px-4 py-3 font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20";
+
+        } else {
+
+            badge.className =
+                "text-center rounded-xl px-4 py-3 font-semibold bg-slate-800 text-slate-300";
+
+        }
+
+
+        updateRainGauge(probability);
+
+    }
+
+
+    /* ============================================================
+       TEMPERATURE FORECAST
+    ============================================================ */
+
+    function renderTemperature(data) {
+
+        const forecast =
+            data.temperature_forecast;
+
+
+        const prediction =
+            Number(forecast.prediction);
+
+        const lower =
+            Number(forecast.lower_90);
+
+        const upper =
+            Number(forecast.upper_90);
+
+
+        document.getElementById("forecast-temp").innerText =
+            `${safeNumber(prediction)}°C`;
+
+
+        document.getElementById("central-prediction").innerText =
+            `${safeNumber(prediction)}°C`;
+
+
+        document.getElementById("lower-bound").innerText =
+            `${safeNumber(lower)}°C`;
+
+
+        document.getElementById("upper-bound").innerText =
+            `${safeNumber(upper)}°C`;
+
+
+        renderForecastChart(
+            prediction,
+            lower,
+            upper
+        );
+
+    }
+
+
+    /* ============================================================
+       FORECAST CHART
+    ============================================================ */
+
+    function renderForecastChart(
+        prediction,
+        lower,
+        upper
+    ) {
+
+        const canvas =
+            document.getElementById("forecastChart");
+
+
+        if (forecastChart) {
+
+            forecastChart.destroy();
+
+        }
+
+
+        forecastChart =
+            new Chart(canvas, {
+
+                type: "line",
+
+                data: {
+
+                    labels: [
+                        "Current",
+                        "t+24h"
+                    ],
+
+                    datasets: [
+
+                        {
+                            label: "24h-Ahead Temperature",
+
+                            data: [
+                                null,
+                                prediction
+                            ],
+
+                            borderColor: "#60a5fa",
+
+                            backgroundColor: "#60a5fa",
+
+                            borderWidth: 3,
+
+                            pointRadius: 6,
+
+                            pointHoverRadius: 8,
+
+                            tension: 0.2
+                        },
+
+                        {
+                            label: "Lower 90%",
+
+                            data: [
+                                null,
+                                lower
+                            ],
+
+                            borderColor: "rgba(148,163,184,.45)",
+
+                            borderWidth: 1,
+
+                            borderDash: [5,5],
+
+                            pointRadius: 0
+                        },
+
+                        {
+                            label: "Upper 90%",
+
+                            data: [
+                                null,
+                                upper
+                            ],
+
+                            borderColor: "rgba(148,163,184,.45)",
+
+                            borderWidth: 1,
+
+                            borderDash: [5,5],
+
+                            pointRadius: 0
+                        }
+
+                    ]
+
+                },
+
+
+                options: {
+
+                    responsive: true,
+
+                    maintainAspectRatio: false,
+
+                    interaction: {
+                        intersect: false,
+                        mode: "index"
+                    },
+
+                    plugins: {
+
+                        legend: {
+
+                            labels: {
+                                color: "#94a3b8"
+                            }
+
+                        },
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label: function(context) {
+
+                                    if (
+                                        context.raw === null ||
+                                        context.raw === undefined
+                                    ) {
+                                        return "";
+                                    }
+
+                                    return `${context.dataset.label}: ${Number(context.raw).toFixed(2)}°C`;
+
+                                }
+
+                            }
+
+                        }
+
+                    },
+
+
+                    scales: {
+
+                        x: {
+
+                            grid: {
+                                color: "rgba(148,163,184,.08)"
+                            },
+
+                            ticks: {
+                                color: "#64748b"
+                            }
+
+                        },
+
+                        y: {
+
+                            title: {
+
+                                display: true,
+
+                                text: "Temperature (°C)",
+
+                                color: "#64748b"
+
+                            },
+
+                            grid: {
+                                color: "rgba(148,163,184,.08)"
+                            },
+
+                            ticks: {
+                                color: "#64748b"
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            });
+
+    }
+
+
+    /* ============================================================
+       CURRENT WEATHER
+    ============================================================ */
+
+    function renderCurrent(data) {
+
+        const current =
+            data.current;
+
+
+        document.getElementById("cur-temp").innerText =
+            `${safeNumber(current.temperature)}°C`;
+
+
+        document.getElementById("cur-hum").innerText =
+            `${safeNumber(current.humidity, 1)}%`;
+
+
+        document.getElementById("cur-pres").innerText =
+            `${safeNumber(current.pressure, 1)} hPa`;
+
+
+        document.getElementById("cur-wind").innerText =
+            `${safeNumber(current.wind_speed, 1)} km/h`;
+
+
+        document.getElementById("cur-cloud").innerText =
+            `${safeNumber(current.cloud_cover, 1)}%`;
+
+    }
+
+
+    /* ============================================================
+       DECISION SUPPORT
+    ============================================================ */
+
+    function renderDecisionSupport(data) {
+
+        const alerts =
+            data.decision_support?.alerts || [];
+
+
+        const count =
+            alerts.length;
+
+
+        const countElement =
+            document.getElementById("alert-count");
+
+
+        countElement.innerText =
+            `${count} alert${count === 1 ? "" : "s"}`;
+
+
+        const container =
+            document.getElementById("decision-container");
+
+
+        container.innerHTML = "";
+
+
+        if (count === 0) {
+
+            container.innerHTML = `
+
+                <div class="glass-soft rounded-2xl p-5">
+
+                    <div class="flex items-start gap-4">
+
+                        <div class="w-10 h-10 rounded-xl
+                                    bg-emerald-500/10
+                                    flex items-center justify-center
+                                    text-emerald-400">
+
+                            ✓
+
+                        </div>
+
+                        <div>
+
+                            <div class="font-semibold text-white">
+
+                                No active weather alerts
+
+                            </div>
+
+                            <div class="text-sm text-slate-500 mt-1">
+
+                                Current model outputs do not trigger the
+                                configured decision-support rules.
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            `;
+
+            return;
+
+        }
+
+
+        alerts.forEach((alert) => {
+
+            const item =
+                document.createElement("div");
+
+            item.className =
+                "mb-3 rounded-2xl p-5 bg-amber-500/10 border border-amber-500/20";
+
+
+            item.innerHTML = `
+
+                <div class="flex items-start gap-4">
+
+                    <div class="w-10 h-10 rounded-xl
+                                bg-amber-500/10
+                                flex items-center justify-center
+                                text-amber-400">
+
+                        !
+
+                    </div>
+
+                    <div>
+
+                        <div class="font-semibold text-amber-300">
+
+                            Weather Alert
+
+                        </div>
+
+                        <div class="text-sm text-slate-400 mt-1">
+
+                            ${alert}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            `;
+
+
+            container.appendChild(item);
+
+        });
+
+    }
+
+
+    /* ============================================================
+       FETCH API
+    ============================================================ */
+
+    async function fetchForecast() {
+
+        const loading =
+            document.getElementById("loading-state");
+
+        const error =
+            document.getElementById("error-state");
+
+
+        loading.classList.remove("hidden");
+        error.classList.add("hidden");
+
+
+        setStatus("Connecting...", true);
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/forecast",
+                    {
+                        method: "GET",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    `API returned HTTP ${response.status}`
+                );
+
+            }
+
+
+            const data =
+                await response.json();
+
+
+            /*
+             * Validate the expected research API structure.
+             */
+
+            if (
+                !data.current ||
+                !data.temperature_forecast ||
+                !data.rainfall_prediction ||
+                !data.explainability
+            ) {
+
+                throw new Error(
+                    "API response structure is incomplete."
+                );
+
+            }
+
+
+            /* Current weather */
+
+            renderCurrent(data);
+
+
+            /* Temperature */
+
+            renderTemperature(data);
+
+
+            /* Rain */
+
+            renderRainfall(data);
+
+
+            /* Local SHAP */
+
+            renderLocalSHAP(
+                data.explainability.local
+            );
+
+
+            /* Global SHAP */
+
+            renderGlobalSHAP(
+                data.explainability.global
+            );
+
+
+            /* Decision support */
+
+            renderDecisionSupport(data);
+
+
+            /* System metadata */
+
+            if (data.system) {
+
+                document.getElementById("forecast-origin").innerText =
+                    `Forecast origin: ${formatDateTime(data.system.forecast_origin)}`;
+
+            }
+
+
+            document.getElementById("last-updated").innerText =
+                `Updated: ${new Date().toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: true
+                })}`;
+
+
+            setStatus("Operational", true);
+
+
+        } catch (errorObject) {
+
+            console.error(errorObject);
+
+
+            setStatus("Unavailable", false);
+
+
+            document.getElementById("error-message").innerText =
+                errorObject.message ||
+                "Unable to retrieve forecast data.";
+
+
+            error.classList.remove("hidden");
+
+        } finally {
+
+            loading.classList.add("hidden");
+
+        }
+
+    }
+
+
+    /* ============================================================
+       INITIAL LOAD
+    ============================================================ */
+
+    fetchForecast();
+
+
+    /*
+     * Refresh every 15 minutes.
+     *
+     * This does not create a new model or retrain anything.
+     * It simply obtains the latest operational weather inputs.
+     */
+
+    setInterval(
+        fetchForecast,
+        15 * 60 * 1000
+    );
+
+</script>
+
+</body>
+</html>
