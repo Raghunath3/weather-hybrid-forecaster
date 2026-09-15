@@ -7,3 +7,5 @@ __pycache__/
 .env.*
 train_residual_correction.py
 train_residual_correction_v2.py
+data/*.csv
+results/residual_*.csv
