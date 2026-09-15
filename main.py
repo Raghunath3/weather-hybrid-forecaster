@@ -127,6 +127,8 @@ temperature_model.load_model(
     TEMPERATURE_MODEL_PATH
 )
 
+print("Temperature model loaded.")
+
 
 print("Loading rainfall model...")
 
@@ -136,6 +138,7 @@ rainfall_model.load_model(
     RAINFALL_MODEL_PATH
 )
 
+print("Rainfall model loaded.")
 
 print("Models loaded successfully.")
 
@@ -240,20 +243,15 @@ async def health():
 
         "status": "ok",
 
-        "temperature_model":
-            "loaded",
+        "temperature_model": "loaded",
 
-        "rainfall_model":
-            "loaded",
+        "rainfall_model": "loaded",
 
-        "location":
-            LOCATION_NAME,
+        "location": LOCATION_NAME,
 
-        "forecast_horizon":
-            "24 hours",
+        "forecast_horizon": "24 hours",
 
-        "rainfall_threshold":
-            RAINFALL_THRESHOLD
+        "rainfall_threshold": RAINFALL_THRESHOLD
     }
 
 
@@ -274,15 +272,15 @@ def get_local_now():
 
 def fetch_recent_weather():
 
+    # IMPORTANT:
+    # This must be a real URL, NOT Markdown.
     url = "https://api.open-meteo.com/v1/forecast"
 
     params = {
 
-        "latitude":
-            LATITUDE,
+        "latitude": LATITUDE,
 
-        "longitude":
-            LONGITUDE,
+        "longitude": LONGITUDE,
 
         "hourly": [
             "temperature_2m",
@@ -294,18 +292,20 @@ def fetch_recent_weather():
             "wind_direction_10m"
         ],
 
-        # We only need recent history for
-        # the lag/rolling features.
+        # We need enough historical hourly observations
+        # to calculate the 24-hour rolling features
+        # and all lag features.
         "past_hours": 48,
 
-        # One future hour is harmless because
-        # we explicitly reject timestamps > now.
+        # One future hour is requested, but it will NOT
+        # be used because select_forecast_origin()
+        # explicitly rejects timestamps > current time.
         "forecast_hours": 1,
 
-        "timezone":
-            TIMEZONE
+        "timezone": TIMEZONE
     }
 
+    print("Requesting recent weather from Open-Meteo...")
 
     response = requests.get(
         url,
@@ -313,19 +313,19 @@ def fetch_recent_weather():
         timeout=20
     )
 
+    print(
+        f"Open-Meteo response status: {response.status_code}"
+    )
 
     response.raise_for_status()
 
-
     payload = response.json()
-
 
     if "hourly" not in payload:
 
         raise RuntimeError(
-            "Hourly weather data missing."
+            "Hourly weather data missing from Open-Meteo response."
         )
-
 
     return payload
 
@@ -337,7 +337,6 @@ def fetch_recent_weather():
 def weather_to_dataframe(payload):
 
     hourly = payload["hourly"]
-
 
     df = pd.DataFrame({
 
@@ -368,13 +367,11 @@ def weather_to_dataframe(payload):
             hourly["wind_direction_10m"]
     })
 
-
     df = df.sort_values(
         "timestamp"
     ).reset_index(
         drop=True
     )
-
 
     return df
 
@@ -386,7 +383,6 @@ def weather_to_dataframe(payload):
 def engineer_features(df):
 
     df = df.copy()
-
 
     # --------------------------------------------------------
     # TEMPORAL FEATURES
@@ -400,7 +396,6 @@ def engineer_features(df):
         df["timestamp"].dt.month
     )
 
-
     df["hour_sin"] = np.sin(
         2 * np.pi * df["hour"] / 24
     )
@@ -409,7 +404,6 @@ def engineer_features(df):
         2 * np.pi * df["hour"] / 24
     )
 
-
     df["month_sin"] = np.sin(
         2 * np.pi * df["month"] / 12
     )
@@ -417,7 +411,6 @@ def engineer_features(df):
     df["month_cos"] = np.cos(
         2 * np.pi * df["month"] / 12
     )
-
 
     # --------------------------------------------------------
     # WIND DIRECTION CYCLIC ENCODING
@@ -434,7 +427,6 @@ def engineer_features(df):
             df["wind_direction"]
         )
     )
-
 
     # --------------------------------------------------------
     # TEMPERATURE LAGS
@@ -455,7 +447,6 @@ def engineer_features(df):
             .shift(lag)
         )
 
-
     # --------------------------------------------------------
     # OTHER LAGS
     # --------------------------------------------------------
@@ -467,14 +458,12 @@ def engineer_features(df):
         .shift(1)
     )
 
-
     df[
         "pressure_lag_1h"
     ] = (
         df["pressure"]
         .shift(1)
     )
-
 
     df[
         "wind_speed_lag_1h"
@@ -483,14 +472,12 @@ def engineer_features(df):
         .shift(1)
     )
 
-
     df[
         "rain_lag_1h"
     ] = (
         df["rain"]
         .shift(1)
     )
-
 
     # --------------------------------------------------------
     # 24-HOUR ROLLING FEATURES
@@ -507,7 +494,6 @@ def engineer_features(df):
         .mean()
     )
 
-
     df[
         "temperature_rolling_std_24h"
     ] = (
@@ -518,7 +504,6 @@ def engineer_features(df):
         )
         .std()
     )
-
 
     # --------------------------------------------------------
     # CHANGE FEATURES
@@ -531,14 +516,12 @@ def engineer_features(df):
         .diff(1)
     )
 
-
     df[
         "pressure_change_1h"
     ] = (
         df["pressure"]
         .diff(1)
     )
-
 
     return df
 
@@ -554,13 +537,15 @@ def select_forecast_origin(df):
     # Convert current local time to timezone-naive
     # because Open-Meteo timestamps were requested
     # in Asia/Kolkata.
+
     now_naive = (
         pd.Timestamp(now)
         .tz_localize(None)
     )
 
-
-    # CRITICAL LEAKAGE PROTECTION:
+    # --------------------------------------------------------
+    # LEAKAGE PROTECTION
+    # --------------------------------------------------------
     #
     # Only timestamps <= current time are allowed.
     #
@@ -571,25 +556,25 @@ def select_forecast_origin(df):
         df["timestamp"] <= now_naive
     ].copy()
 
-
     if available.empty:
 
         raise RuntimeError(
             "No current/past weather observation available."
         )
 
-
     latest_timestamp = (
         available["timestamp"]
         .max()
     )
-
 
     row = available[
         available["timestamp"]
         == latest_timestamp
     ].iloc[-1]
 
+    print(
+        f"Forecast origin selected: {latest_timestamp}"
+    )
 
     return row, latest_timestamp
 
@@ -608,16 +593,13 @@ def build_model_input(
         == forecast_origin
     ]
 
-
     if row.empty:
 
         raise RuntimeError(
             "Forecast-origin feature row not found."
         )
 
-
     row = row.iloc[0]
-
 
     missing = [
         feature
@@ -625,14 +607,12 @@ def build_model_input(
         if pd.isna(row[feature])
     ]
 
-
     if missing:
 
         raise RuntimeError(
             "Missing engineered features: "
             + ", ".join(missing)
         )
-
 
     X = pd.DataFrame(
         [
@@ -643,7 +623,6 @@ def build_model_input(
         ],
         columns=FEATURES
     )
-
 
     return X
 
@@ -659,14 +638,12 @@ def calculate_local_shap(X):
         feature_names=FEATURES
     )
 
-
     contributions = (
         temperature_model.predict(
             dmatrix,
             pred_contribs=True
         )[0]
     )
-
 
     # Last value is the bias/base contribution.
     feature_contributions = (
@@ -677,9 +654,7 @@ def calculate_local_shap(X):
         contributions[-1]
     )
 
-
     local_features = []
-
 
     for feature, contribution in zip(
         FEATURES,
@@ -706,15 +681,13 @@ def calculate_local_shap(X):
                 )
         })
 
-
-    # Strongest contributors first
+    # Strongest contributors first.
 
     local_features.sort(
         key=lambda item:
             item["absolute_shap_value"],
         reverse=True
     )
-
 
     return {
 
@@ -740,25 +713,21 @@ def predict_temperature(X):
         feature_names=FEATURES
     )
 
-
     prediction = float(
         temperature_model.predict(
             dmatrix
         )[0]
     )
 
-
     lower = (
         prediction
         - TEMPERATURE_INTERVAL_RADIUS
     )
 
-
     upper = (
         prediction
         + TEMPERATURE_INTERVAL_RADIUS
     )
-
 
     return {
 
@@ -802,20 +771,17 @@ def predict_rainfall(X):
         feature_names=FEATURES
     )
 
-
     probability = float(
         rainfall_model.predict(
             dmatrix
         )[0]
     )
 
-
     probability = np.clip(
         probability,
         0.0,
         1.0
     )
-
 
     if probability >= RAINFALL_THRESHOLD:
 
@@ -828,7 +794,6 @@ def predict_rainfall(X):
         classification = (
             "NO RAIN EXPECTED"
         )
-
 
     return {
 
@@ -866,8 +831,9 @@ def generate_alerts(
 
     alerts = []
 
-
-    # High rainfall probability
+    # --------------------------------------------------------
+    # HIGH RAINFALL PROBABILITY
+    # --------------------------------------------------------
 
     if rainfall[
         "probability_decimal"
@@ -886,7 +852,6 @@ def generate_alerts(
                 "at the 24-hour forecast horizon."
         })
 
-
     elif rainfall[
         "probability_decimal"
     ] >= RAINFALL_THRESHOLD:
@@ -904,8 +869,9 @@ def generate_alerts(
                 "24-hour forecast horizon."
         })
 
-
-    # Heat alert
+    # --------------------------------------------------------
+    # HEAT ALERT
+    # --------------------------------------------------------
 
     if current[
         "temperature"
@@ -924,7 +890,6 @@ def generate_alerts(
                 "35°C."
         })
 
-
     return alerts
 
 
@@ -941,10 +906,11 @@ async def forecast():
         # 1. Retrieve recent weather history
         # ----------------------------------------------------
 
+        print("Starting forecast request...")
+
         payload = (
             fetch_recent_weather()
         )
-
 
         # ----------------------------------------------------
         # 2. Convert to dataframe
@@ -956,6 +922,9 @@ async def forecast():
             )
         )
 
+        print(
+            f"Weather rows received: {len(raw_df)}"
+        )
 
         # ----------------------------------------------------
         # 3. Engineer features
@@ -967,9 +936,8 @@ async def forecast():
             )
         )
 
-
         # ----------------------------------------------------
-        # 4. Select ONLY latest observable
+        # 4. Select ONLY latest observable row
         # ----------------------------------------------------
 
         latest_row, forecast_origin = (
@@ -977,7 +945,6 @@ async def forecast():
                 engineered_df
             )
         )
-
 
         # ----------------------------------------------------
         # 5. Construct model input
@@ -988,6 +955,9 @@ async def forecast():
             forecast_origin
         )
 
+        print(
+            "Model input successfully constructed."
+        )
 
         # ----------------------------------------------------
         # 6. Temperature prediction
@@ -997,6 +967,10 @@ async def forecast():
             predict_temperature(X)
         )
 
+        print(
+            f"Temperature prediction: "
+            f"{temperature_result['prediction']}°C"
+        )
 
         # ----------------------------------------------------
         # 7. Rainfall prediction
@@ -1006,6 +980,10 @@ async def forecast():
             predict_rainfall(X)
         )
 
+        print(
+            f"Rainfall probability: "
+            f"{rainfall_result['probability']}%"
+        )
 
         # ----------------------------------------------------
         # 8. Local SHAP
@@ -1015,6 +993,9 @@ async def forecast():
             calculate_local_shap(X)
         )
 
+        print(
+            "Local SHAP calculation completed."
+        )
 
         # ----------------------------------------------------
         # 9. Current conditions
@@ -1093,7 +1074,6 @@ async def forecast():
                 )
         }
 
-
         # ----------------------------------------------------
         # 10. Decision support
         # ----------------------------------------------------
@@ -1103,10 +1083,13 @@ async def forecast():
             rainfall_result
         )
 
-
         # ----------------------------------------------------
         # 11. Response
         # ----------------------------------------------------
+
+        print(
+            "Forecast request completed successfully."
+        )
 
         return {
 
@@ -1141,17 +1124,13 @@ async def forecast():
                     "24 hours"
             },
 
-
             "current": current,
-
 
             "temperature_forecast":
                 temperature_result,
 
-
             "rainfall_prediction":
                 rainfall_result,
-
 
             "explainability": {
 
@@ -1165,7 +1144,6 @@ async def forecast():
                     GLOBAL_SHAP_IMPORTANCE
             },
 
-
             "decision_support": {
 
                 "alerts":
@@ -1174,31 +1152,59 @@ async def forecast():
                 "alert_count":
                     len(alerts)
             }
-
         }
 
+    # ========================================================
+    # WEATHER API ERROR
+    # ========================================================
 
     except requests.RequestException as error:
 
-    print("========== WEATHER API ERROR ==========")
-    print(repr(error))
-    print("=======================================")
+        print(
+            "========== WEATHER API ERROR =========="
+        )
 
-    raise HTTPException(
-        status_code=503,
-        detail=f"Weather data service unavailable: {str(error)}"
-    )
+        print(
+            repr(error)
+        )
 
-except Exception as error:
+        print(
+            "======================================="
+        )
 
-    print("========== FORECAST ERROR ==========")
-    print(repr(error))
-    print("====================================")
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Weather data service unavailable: "
+                + str(error)
+            )
+        )
 
-    raise HTTPException(
-        status_code=500,
-        detail=f"Forecast processing error: {str(error)}"
-    )
+    # ========================================================
+    # ALL OTHER FORECAST ERRORS
+    # ========================================================
+
+    except Exception as error:
+
+        print(
+            "========== FORECAST PROCESSING ERROR =========="
+        )
+
+        print(
+            repr(error)
+        )
+
+        print(
+            "==============================================="
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Forecast processing error: "
+                + str(error)
+            )
+        )
 
 
 # ============================================================
@@ -1210,12 +1216,8 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-
         "main:app",
-
         host="127.0.0.1",
-
         port=8000,
-
         reload=True
     )
